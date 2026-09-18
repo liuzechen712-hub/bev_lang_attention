@@ -4,7 +4,7 @@ from functools import wraps
 
 import torch.distributed as dist
 
-# DISABLED_DETECTRON2: from detectron2.utils import comm as d2_comm
+from detectron2.utils import comm as d2_comm
 
 LOG = logging.getLogger(__name__)
 

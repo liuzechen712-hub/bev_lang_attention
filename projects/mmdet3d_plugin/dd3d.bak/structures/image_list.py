@@ -8,7 +8,7 @@ import torch
 from torch import device
 from torch.nn import functional as F
 
-# DISABLED_DETECTRON2: from detectron2.utils.env import TORCH_VERSION
+from detectron2.utils.env import TORCH_VERSION
 
 
 def _as_tensor(x: Tuple[int, int]) -> torch.Tensor:
@@ -26,8 +26,8 @@ def _as_tensor(x: Tuple[int, int]) -> torch.Tensor:
 
 class ImageList(object):
     """
-# DISABLED_DETECTRON2:     Adapted from detectron2:
-# DISABLED_DETECTRON2:         https://github.com/facebookresearch/detectron2/blob/master/detectron2/structures/image_list.py)
+    Adapted from detectron2:
+        https://github.com/facebookresearch/detectron2/blob/master/detectron2/structures/image_list.py)
 
     Key differences:
         - add optional intrinsics

@@ -1,7 +1,7 @@
 # Copyright 2021 Toyota Research Institute.  All rights reserved.
 from collections import OrderedDict
 
-# DISABLED_DETECTRON2: # from detectron2.config import configurable
+# from detectron2.config import configurable
 
 
 class Task():

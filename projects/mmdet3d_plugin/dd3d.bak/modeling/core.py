@@ -2,10 +2,10 @@
 import torch
 from torch import nn
 
-# DISABLED_DETECTRON2: #from detectron2.modeling.meta_arch.build import META_ARCH_REGISTRY
-# DISABLED_DETECTRON2: from detectron2.modeling.postprocessing import detector_postprocess as resize_instances
-# DISABLED_DETECTRON2: from detectron2.structures import Instances
-# DISABLED_DETECTRON2: from detectron2.layers import ShapeSpec
+#from detectron2.modeling.meta_arch.build import META_ARCH_REGISTRY
+from detectron2.modeling.postprocessing import detector_postprocess as resize_instances
+from detectron2.structures import Instances
+from detectron2.layers import ShapeSpec
 from mmcv.runner import force_fp32
 
 from .fcos2d import FCOS2DHead, FCOS2DInference, FCOS2DLoss

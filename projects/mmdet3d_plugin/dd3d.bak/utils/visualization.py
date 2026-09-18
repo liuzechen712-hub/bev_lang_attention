@@ -22,7 +22,7 @@ def fill_color_polygon(image, polygon, color, alpha=0.5):
 
 def change_color_brightness(color, brightness_factor):
     """
-# DISABLED_DETECTRON2:     Copied from detectron2.utils.visualizer.py
+    Copied from detectron2.utils.visualizer.py
     -------------------------------------------
 
     Depending on the brightness_factor, gives a lighter or darker color i.e. a color with

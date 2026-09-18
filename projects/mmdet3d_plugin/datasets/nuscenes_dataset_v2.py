@@ -1,3 +1,4 @@
+import os
 import copy
 from mmdet3d.datasets import NuScenesDataset
 import mmcv
@@ -36,7 +37,9 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
         input_dict = self.get_data_info(index)
         cur_scene_token = input_dict['scene_token']
         self.pre_pipeline(input_dict)
+        print(f"🔍 [DEBUG] Before pipeline for index: {index}", flush=True)
         example = self.pipeline(input_dict)
+        print(f"🔍 [DEBUG] After pipeline for index: {index}", flush=True)
         data_queue[0] = example
         
         for frame_idx in self.frames:
@@ -67,6 +70,7 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
         return ret
 
     def prepare_train_data(self, index):
+        print(f"🔍 [DEBUG] Loading sample index: {index}", flush=True)
         """
         Training data preparation.
         Args:
@@ -107,6 +111,13 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
         return self.union2one(data_queue)
 
     def union2one(self, queue: dict):
+        # 强制补充 queue 中每个 item 可能缺失的键，防止 KeyError
+        for item in queue.values():
+            item.setdefault('lidar2ego_rotation', [1, 0, 0, 0])
+            item.setdefault('lidar2ego_translation', [0, 0, 0])
+            item.setdefault('ego2global_rotation', [1, 0, 0, 0])
+            item.setdefault('ego2global_translation', [0, 0, 0])
+
         """
         convert sample queue into one single sample.
         """
@@ -121,7 +132,7 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
         metas_map = {}
         for i, each in queue.items():
             metas_map[i] = each['img_metas'].data
-            metas_map[i]['timestamp'] = each['timestamp']
+            metas_map[i]['timestamp'] = each.get('timestamp', 0)
             if 'aug_param' in each:
                 metas_map[i]['aug_param'] = each['aug_param']
             if i == 0:
@@ -144,18 +155,18 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
     def prepare_input_dict(self, info):
         # standard protocal modified from SECOND.Pytorch
         input_dict = dict(
-            sample_idx=info['token'],
-            pts_filename=info['lidar_path'],
-            sweeps=info['sweeps'],
-            ego2global_translation=info['ego2global_translation'],
-            ego2global_rotation=info['ego2global_rotation'],
-            lidar2ego_translation=info['lidar2ego_translation'],
-            lidar2ego_rotation=info['lidar2ego_rotation'],
-            prev=info['prev'],
-            next=info['next'],
-            scene_token=info['scene_token'],
-            frame_idx=info['frame_idx'],
-            timestamp=info['timestamp'] / 1e6,
+            sample_idx=info.get('token', ''),
+            pts_filename=info.get('lidar_path', '') or 'dummy_lidar.bin',
+            sweeps=info.get('sweeps', []) or [{'sample_data_token': 'dummy'}],
+            ego2global_translation=info.get('ego2global_translation', [0, 0, 0]),
+            ego2global_rotation=info.get('ego2global_rotation', [1, 0, 0, 0]),
+            lidar2ego_translation=info.get('lidar2ego_translation', [0, 0, 0]),
+            lidar2ego_rotation=info.get('lidar2ego_rotation', [1, 0, 0, 0]),
+            prev=info.get('prev', ''),
+            next=info.get('next', ''),
+            scene_token=info.get('scene_token', ''),
+            frame_idx=info.get('frame_idx', 0),
+            timestamp=info.get('timestamp', 0) / 1e6,
         )
 
         if self.modality['use_camera']:
@@ -164,15 +175,25 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
             lidar2cam_rts = []
             cam_intrinsics = []
             for cam_type, cam_info in info['cams'].items():
-                image_paths.append(cam_info['data_path'])
+                image_paths.append(os.path.join(self.data_root, cam_info['data_path']))
                 # obtain lidar to image transformation matrix
-                lidar2cam_r = np.linalg.inv(cam_info['sensor2lidar_rotation'])
-                lidar2cam_t = cam_info[
-                    'sensor2lidar_translation'] @ lidar2cam_r.T
+                # Handle both formats
+                if 'sensor2lidar_rotation' in cam_info:
+                    _s2l_r = cam_info.get('sensor2lidar_rotation', None)
+                    _s2l_t = cam_info.get('sensor2lidar_translation', None)
+                    _cam_int = np.array(cam_info.get('cam_intrinsic', cam_info.get('intrinsics', [[1,0,0],[0,1,0],[0,0,1]])))
+                else:
+                    from pyquaternion import Quaternion
+                    _ext = cam_info['extrinsics']
+                    _s2l_r = Quaternion(_ext['rotation']).rotation_matrix
+                    _s2l_t = np.array(_ext['translation'])
+                    _cam_int = np.array(cam_info['intrinsics'])
+                lidar2cam_r = np.linalg.inv(_s2l_r)
+                lidar2cam_t = _s2l_t @ lidar2cam_r.T
                 lidar2cam_rt = np.eye(4)
                 lidar2cam_rt[:3, :3] = lidar2cam_r.T
                 lidar2cam_rt[3, :3] = -lidar2cam_t
-                intrinsic = cam_info['cam_intrinsic']
+                intrinsic = np.array(cam_info.get('cam_intrinsic', cam_info.get('intrinsics', [[1,0,0],[0,1,0],[0,0,1]])))
                 viewpad = np.eye(4)
                 viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
                 lidar2img_rt = (viewpad @ lidar2cam_rt.T)
@@ -189,6 +210,24 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
                     lidar2cam=lidar2cam_rts,
                 ))
 
+        # 强制初始化 MMDet3D Pipeline 必需的元数据字段
+        input_dict.setdefault('bbox3d_fields', [])
+        input_dict.setdefault('img_fields', [])
+        input_dict.setdefault('seg_fields', [])
+        # 添加 prev_bev_exists 标志（DriveLM 数据没有历史 BEV）
+        input_dict['prev_bev_exists'] = False
+        
+        # 生成 Dummy can_bus 数据（18维向量）
+        # [0:3] 位置, [3:7] 四元数, [7:10] 速度, [10:13] 加速度, [13:16] 角速度, [16:18] 转向
+        can_bus = np.zeros(18, dtype=np.float32)
+        # 从 ego2global_translation 获取位置
+        ego_trans = input_dict.get('ego2global_translation', [0, 0, 0])
+        can_bus[0:3] = ego_trans
+        # 从 ego2global_rotation 获取四元数
+        ego_rot = input_dict.get('ego2global_rotation', [1, 0, 0, 0])
+        can_bus[3:7] = ego_rot
+        input_dict['can_bus'] = can_bus
+        
         return input_dict
 
     def filter_crowd_annotations(self, data_dict):
@@ -196,6 +235,107 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
             if ann.get("iscrowd", 0) == 0:
                 return True
         return False
+
+    def get_ann_info(self, index):
+        """Read annotations from nuScenes official v1.0-trainval metadata."""
+        import numpy as np
+        from mmdet3d.core.bbox import LiDARInstance3DBoxes
+        from pyquaternion import Quaternion
+
+        # 懒加载 nuScenes 标注索引
+        if not hasattr(self, '_nusc_ann_index'):
+            self._build_nusc_ann_index()
+
+        info = self.data_infos[index]
+        sample_token = info['token']
+
+        NAME_MAPPING = {
+            'vehicle.car': 'car',
+            'vehicle.truck': 'truck',
+            'vehicle.construction': 'construction_vehicle',
+            'vehicle.bus.bendy': 'bus',
+            'vehicle.bus.rigid': 'bus',
+            'vehicle.trailer': 'trailer',
+            'movable_object.barrier': 'barrier',
+            'vehicle.motorcycle': 'motorcycle',
+            'vehicle.bicycle': 'bicycle',
+            'human.pedestrian.adult': 'pedestrian',
+            'human.pedestrian.child': 'pedestrian',
+            'human.pedestrian.construction_worker': 'pedestrian',
+            'human.pedestrian.police_officer': 'pedestrian',
+            'human.pedestrian.personal_mobility': 'pedestrian',
+            'human.pedestrian.stroller': 'pedestrian',
+            'human.pedestrian.wheelchair': 'pedestrian',
+            'movable_object.trafficcone': 'traffic_cone',
+        }
+
+        ann_list = self._nusc_ann_index.get(sample_token, [])
+
+        boxes = []
+        names = []
+        for ann in ann_list:
+            cat_name = self._nusc_inst2cat.get(ann['instance_token'], None)
+            if cat_name is None:
+                continue
+            mapped = NAME_MAPPING.get(cat_name, None)
+            if mapped is None or mapped not in self.CLASSES:
+                continue
+            # 过滤无效标注：尺寸必须为正，且至少有1个激光雷达点
+            w, l, h = ann['size']
+            if w <= 0 or l <= 0 or h <= 0:
+                continue
+            if ann.get('num_lidar_pts', 0) + ann.get('num_radar_pts', 0) < 1:
+                continue
+            x, y, z = ann['translation']
+            qw, qx, qy, qz = ann['rotation']
+            yaw = Quaternion(qw, qx, qy, qz).yaw_pitch_roll[0]
+            boxes.append([x, y, z, w, l, h, yaw, 0.0, 0.0])
+            names.append(mapped)
+
+        if len(boxes) > 0:
+            converted = np.array(boxes, dtype=np.float64)
+        else:
+            converted = np.zeros((0, 9), dtype=np.float64)
+            names = np.array([], dtype=object)
+
+        gt_bboxes_3d = LiDARInstance3DBoxes(
+            converted, box_dim=9, origin=(0.5, 0.5, 0.5))
+
+        gt_labels_3d = np.array(
+            [self.CLASSES.index(n) for n in names], dtype=np.int64)
+
+        anns_results = dict(
+            gt_bboxes_3d=gt_bboxes_3d,
+            gt_labels_3d=gt_labels_3d,
+            gt_names=np.array(names, dtype=object))
+        return anns_results
+
+    def _build_nusc_ann_index(self):
+        """Build sample_token -> annotations index from nuScenes metadata."""
+        import json
+        import os
+        base = os.path.join(self.data_root, 'v1.0-trainval')
+        if not os.path.isdir(base):
+            base = '/home/lzc/data/drivelm_nuscenes/v1.0-trainval'
+
+        with open(os.path.join(base, 'sample_annotation.json'), 'r') as f:
+            anns = json.load(f)
+        with open(os.path.join(base, 'instance.json'), 'r') as f:
+            instances = json.load(f)
+        with open(os.path.join(base, 'category.json'), 'r') as f:
+            categories = json.load(f)
+
+        cat_by_token = {c['token']: c['name'] for c in categories}
+        self._nusc_inst2cat = {
+            i['token']: cat_by_token.get(i['category_token'], None)
+            for i in instances}
+
+        index = {}
+        for ann in anns:
+            index.setdefault(ann['sample_token'], []).append(ann)
+        self._nusc_ann_index = index
+        print(f"[NuScenes Ann Index] {len(anns)} annotations, "
+              f"{len(index)} samples indexed.")
 
     def get_data_info(self, index):
         info = self.data_infos[index]
@@ -227,6 +367,24 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
             mono_ann_index = DC(mono_ann_index, cpu_only=True)
             input_dict['mono_input_dict'] = mono_input_dict
             input_dict['mono_ann_idx'] = mono_ann_index
+        # 强制初始化 MMDet3D Pipeline 必需的元数据字段
+        input_dict.setdefault('bbox3d_fields', [])
+        input_dict.setdefault('img_fields', [])
+        input_dict.setdefault('seg_fields', [])
+        # 添加 prev_bev_exists 标志（DriveLM 数据没有历史 BEV）
+        input_dict['prev_bev_exists'] = False
+        
+        # 生成 Dummy can_bus 数据（18维向量）
+        # [0:3] 位置, [3:7] 四元数, [7:10] 速度, [10:13] 加速度, [13:16] 角速度, [16:18] 转向
+        can_bus = np.zeros(18, dtype=np.float32)
+        # 从 ego2global_translation 获取位置
+        ego_trans = input_dict.get('ego2global_translation', [0, 0, 0])
+        can_bus[0:3] = ego_trans
+        # 从 ego2global_rotation 获取四元数
+        ego_rot = input_dict.get('ego2global_rotation', [1, 0, 0, 0])
+        can_bus[3:7] = ego_rot
+        input_dict['can_bus'] = can_bus
+        
         return input_dict
 
     def __getitem__(self, idx):

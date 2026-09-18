@@ -1,12 +1,12 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 # Copyright 2021 Toyota Research Institute.  All rights reserved.
-# DISABLED_DETECTRON2: # Adapted from detectron2:
-# DISABLED_DETECTRON2: #   https://github.com/facebookresearch/detectron2/blob/master/detectron2/data/detection_utils.py
+# Adapted from detectron2:
+#   https://github.com/facebookresearch/detectron2/blob/master/detectron2/data/detection_utils.py
 import numpy as np
 import torch
 
-# DISABLED_DETECTRON2: from detectron2.data import transforms as T
-# DISABLED_DETECTRON2: from detectron2.structures import Boxes, BoxMode, Instances
+from detectron2.data import transforms as T
+from detectron2.structures import Boxes, BoxMode, Instances
 
 from projects.mmdet3d_plugin.dd3d.structures.boxes3d import Boxes3D
 
@@ -19,7 +19,7 @@ def transform_instance_annotations(
     image_size,
 ):
     """Adapted from:
-# DISABLED_DETECTRON2:         https://github.com/facebookresearch/detectron2/blob/master/detectron2/data/detection_utils.py#L254
+        https://github.com/facebookresearch/detectron2/blob/master/detectron2/data/detection_utils.py#L254
 
     The changes from original:
         - The presence of 2D bounding box (i.e. "bbox" field) is assumed by default in d2; here it's optional.

@@ -1,7 +1,7 @@
 # Copyright 2021 Toyota Research Institute.  All rights reserved.
 import torch
 
-# DISABLED_DETECTRON2: from detectron2.layers import cat
+from detectron2.layers import cat
 
 from projects.mmdet3d_plugin.dd3d.structures.boxes3d import Boxes3D
 

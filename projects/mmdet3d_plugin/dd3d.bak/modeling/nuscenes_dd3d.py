@@ -4,11 +4,11 @@ import torch.nn.functional as F
 from fvcore.nn.smooth_l1_loss import smooth_l1_loss
 from torch import nn
 
-# DISABLED_DETECTRON2: # DISABLED_DETECTRON2: # from detectron2.layers import Conv2d, cat  # Disabled: detectron2 not available
-# DISABLED_DETECTRON2: # DISABLED_DETECTRON2: #from detectron2.modeling.meta_arch.build import META_ARCH_REGISTRY
-# DISABLED_DETECTRON2: # DISABLED_DETECTRON2: from detectron2.modeling.postprocessing import detector_postprocess as resize_instances
-# DISABLED_DETECTRON2: # DISABLED_DETECTRON2: from detectron2.structures import Instances
-# DISABLED_DETECTRON2: # DISABLED_DETECTRON2: from detectron2.utils import comm as d2_comm
+# DISABLED_DETECTRON2: # from detectron2.layers import Conv2d, cat  # Disabled: detectron2 not available
+# DISABLED_DETECTRON2: #from detectron2.modeling.meta_arch.build import META_ARCH_REGISTRY
+# DISABLED_DETECTRON2: from detectron2.modeling.postprocessing import detector_postprocess as resize_instances
+# DISABLED_DETECTRON2: from detectron2.structures import Instances
+# DISABLED_DETECTRON2: from detectron2.utils import comm as d2_comm
 from mmdet.models.builder import HEADS
 from mmcv.runner import force_fp32
 

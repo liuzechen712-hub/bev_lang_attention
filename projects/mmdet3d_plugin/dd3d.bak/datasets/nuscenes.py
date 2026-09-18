@@ -7,8 +7,8 @@ import seaborn as sns
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-# DISABLED_DETECTRON2: #from detectron2.data import MetadataCatalog
-# DISABLED_DETECTRON2: from detectron2.structures.boxes import BoxMode
+#from detectron2.data import MetadataCatalog
+from detectron2.structures.boxes import BoxMode
 from nuscenes.eval.detection.utils import category_to_detection_name
 from nuscenes.nuscenes import NuScenes
 from nuscenes.utils.splits import create_splits_scenes

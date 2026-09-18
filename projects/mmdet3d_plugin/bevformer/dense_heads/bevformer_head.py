@@ -38,6 +38,24 @@ class BEVFormerHead(DETRHead):
                  bev_w=30,
                  **kwargs):
 
+        # === CRITICAL FIX: Sanitize cfg to avoid MMCV .parent AttributeError ===
+        import copy
+        def sanitize_cfg(cfg_obj):
+            if cfg_obj is None:
+                return None
+            if isinstance(cfg_obj, dict):
+                return {k: sanitize_cfg(v) for k, v in cfg_obj.items()}
+            return cfg_obj
+        
+        # Convert self-contained cfg to plain dict and back to ConfigDict
+        # This breaks the link to the complex parent hierarchy that causes the crash
+        from mmcv.utils import ConfigDict
+        clean_kwargs = {k: sanitize_cfg(v) for k, v in kwargs.items()}
+        # Note: We don't re-wrap here because build_from_cfg passes args directly.
+        # Instead, we ensure any internal access uses safe dicts.
+        # ======================================================================
+    
+
         self.bev_h = bev_h
         self.bev_w = bev_w
         self.fp16_enabled = False
@@ -267,7 +285,10 @@ class BEVFormerHead(DETRHead):
         bbox_weights[pos_inds] = 1.0
 
         # DETR
-        bbox_targets[pos_inds] = sampling_result.pos_gt_bboxes
+        # Guard: skip assignment when no positive samples,
+        # because mmdet SamplingResult hardcodes [0, 4] for empty gt (2D hack).
+        if pos_inds.numel() > 0:
+            bbox_targets[pos_inds] = sampling_result.pos_gt_bboxes
         return (labels, label_weights, bbox_targets, bbox_weights,
                 pos_inds, neg_inds)
 

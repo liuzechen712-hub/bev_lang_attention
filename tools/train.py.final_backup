@@ -6,18 +6,6 @@
  
 from __future__ import division
 
-# === CRITICAL FIX: Reset environment to avoid Registry parent corruption ===
-import sys
-# Clear any polluted modules from previous failed runs
-mods_to_clear = [k for k in list(sys.modules.keys()) if 'mmdet3d_plugin' in k or 'bevformer' in k]
-for mod in mods_to_clear:
-    del sys.modules[mod]
-
-# Force reload of plugin to ensure clean registration
-import projects.mmdet3d_plugin
-print("✅ Environment reset and Plugin reloaded successfully.")
-# ======================================================================
-
 import argparse
 import copy
 import mmcv

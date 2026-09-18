@@ -6,9 +6,9 @@ from fvcore.nn import sigmoid_focal_loss
 from torch import nn
 from torch.nn import functional as F
 
-# DISABLED_DETECTRON2: from detectron2.layers import Conv2d, batched_nms, cat, get_norm
-# DISABLED_DETECTRON2: from detectron2.structures import Boxes, Instances
-# DISABLED_DETECTRON2: from detectron2.utils.comm import get_world_size
+from detectron2.layers import Conv2d, batched_nms, cat, get_norm
+from detectron2.structures import Boxes, Instances
+from detectron2.utils.comm import get_world_size
 from mmcv.runner import force_fp32
 
 from projects.mmdet3d_plugin.dd3d.layers.iou_loss import IOULoss
