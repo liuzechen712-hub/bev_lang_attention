@@ -135,7 +135,7 @@ train_pipeline = [
                     'pad_shape', 'scale_factor', 'flip', 'cam_intrinsic',
                     'cam2img', 'lidar2cam', 'lidar2ego', 'ego2global',
                     'timestamp', 'prev_bev_exists', 'can_bus',
-                    'scene_token', 'frame_idx', 'sample_idx'])
+                    'scene_token', 'frame_idx', 'sample_idx', 'instruction'])
 ]
 
 data = dict(

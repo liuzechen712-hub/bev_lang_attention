@@ -84,6 +84,26 @@ class BEVFormerHead(DETRHead):
         self.code_weights = nn.Parameter(torch.tensor(
             self.code_weights, requires_grad=False), requires_grad=False)
 
+        # === 语言引导注意力模块初始化 ===
+        from ..modules.language_encoder import LanguageEncoder
+        from ..modules.bev_attention_module import BEVLanguageAttention
+        
+        embed_dims = getattr(self, 'embed_dims', None)
+        if embed_dims is None:
+            embed_dims = getattr(self.transformer, 'embed_dims', 256)
+            
+        self.lang_encoder = LanguageEncoder(
+            model_name='distilbert-base-uncased', 
+            bev_embed_dims=embed_dims
+        )
+        self.bev_attn = BEVLanguageAttention(
+            bev_dim=embed_dims, 
+            lang_dim=embed_dims,
+            bev_h=self.bev_h, 
+            bev_w=self.bev_w
+        )
+        # ==================================
+
     def _init_layers(self):
         """Initialize classification branch and regression branch of head."""
         cls_branch = []
@@ -133,6 +153,66 @@ class BEVFormerHead(DETRHead):
                 nn.init.constant_(m[-1].bias, bias_init)
 
     @auto_fp16(apply_to=('mlvl_feats'))
+
+    def _apply_language_attention(self, bev_embed, img_metas):
+        """将语言特征融合到 BEV 特征中，自动适配维度顺序"""
+        bs = len(img_metas)
+        original_shape = bev_embed.shape
+        
+        # 1. 统一转换为 [B, HW, C] 格式
+        if bev_embed.dim() == 3 and bev_embed.shape[0] != bs:
+            # 如果是 [HW, B, C]，转换为 [B, HW, C]
+            bev_embed = bev_embed.permute(1, 0, 2)
+            
+        c = bev_embed.shape[-1]
+        
+        # 2. 转换为 [B, C, H, W] 进行空间注意力计算
+        bev_feat_map = bev_embed.permute(0, 2, 1).view(bs, c, self.bev_h, self.bev_w)
+        
+        # 3. 提取指令并编码
+        instructions = [meta.get('instruction', '') for meta in img_metas]
+        if all(not inst for inst in instructions):
+            instructions = ["no instruction"] * bs
+            
+        lang_feats = self.lang_encoder(instructions)
+        
+        # 4. 应用 BEV 空间注意力增强
+        attn_mask, enhanced_bev_map = self.bev_attn(bev_feat_map, lang_feats)
+        
+        # 5. 恢复为 [B, HW, C]
+        enhanced_bev_embed = enhanced_bev_map.view(bs, c, -1).permute(0, 2, 1)
+        
+        # 6. 恢复原始的维度顺序 (如果是 [HW, B, C]，则转回去)
+        if len(original_shape) == 3 and original_shape[0] != bs:
+            enhanced_bev_embed = enhanced_bev_embed.permute(1, 0, 2)
+            
+
+        # === 自动可视化注意力掩码 (指导书产出要求) ===
+        import os
+        import matplotlib.pyplot as plt
+        vis_dir = 'work_dirs/attn_vis'
+        os.makedirs(vis_dir, exist_ok=True)
+        
+        if not hasattr(self, '_vis_cnt'):
+            self._vis_cnt = 0
+            
+        # 只保存前 50 个样本的掩码，避免生成太多文件
+        if self.training and self._vis_cnt < 50:
+            # 取 batch 中第一个样本的掩码
+            mask_np = attn_mask[0, 0].detach().cpu().numpy()
+            fig, ax = plt.subplots(figsize=(4, 4))
+            # 使用 'hot'  colormap 画热力图
+            cax = ax.imshow(mask_np, cmap='hot', interpolation='nearest')
+            ax.set_title(f"Instruction: {instructions[0][:40]}...", fontsize=10)
+            ax.axis('off')
+            plt.savefig(f'{vis_dir}/mask_{self._vis_cnt:04d}.png', bbox_inches='tight', pad_inches=0.1)
+            plt.close()
+            self._vis_cnt += 1
+        # ==========================================
+
+        return enhanced_bev_embed
+
+
     def forward(self, mlvl_feats, img_metas, prev_bev=None,  only_bev=False):
         """Forward function.
         Args:
@@ -159,7 +239,7 @@ class BEVFormerHead(DETRHead):
         bev_pos = self.positional_encoding(bev_mask).to(dtype)
 
         if only_bev:  # only use encoder to obtain BEV features, TODO: refine the workaround
-            return self.transformer.get_bev_features(
+            bev_embed = self.transformer.get_bev_features(
                 mlvl_feats,
                 bev_queries,
                 self.bev_h,
@@ -170,6 +250,8 @@ class BEVFormerHead(DETRHead):
                 img_metas=img_metas,
                 prev_bev=prev_bev,
             )
+            bev_embed = self._apply_language_attention(bev_embed, img_metas)
+            return bev_embed
         else:
             outputs = self.transformer(
                 mlvl_feats,
@@ -187,6 +269,7 @@ class BEVFormerHead(DETRHead):
         )
 
         bev_embed, hs, init_reference, inter_references = outputs
+        bev_embed = self._apply_language_attention(bev_embed, img_metas)
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
         outputs_coords = []
@@ -540,6 +623,7 @@ class BEVFormerHead_GroupDETR(BEVFormerHead):
         assert 'num_query' in kwargs
         kwargs['num_query'] = group_detr * kwargs['num_query']
         super().__init__(*args, **kwargs)
+
 
     def forward(self, mlvl_feats, img_metas, prev_bev=None,  only_bev=False):
         bs, num_cam, _, _, _ = mlvl_feats[0].shape

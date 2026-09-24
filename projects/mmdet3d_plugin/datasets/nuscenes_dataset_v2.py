@@ -228,6 +228,12 @@ class CustomNuScenesDatasetV2(NuScenesDataset):
         can_bus[3:7] = ego_rot
         input_dict['can_bus'] = can_bus
         
+        # 提取 DriveLM 驾驶指令 (用于语言引导注意力)
+        instruction = ""
+        if 'drivelm_qa' in info and info['drivelm_qa'] is not None and len(info['drivelm_qa']) > 0:
+            instruction = info['drivelm_qa'][0].get('question', '')
+        input_dict['instruction'] = instruction
+        
         return input_dict
 
     def filter_crowd_annotations(self, data_dict):
