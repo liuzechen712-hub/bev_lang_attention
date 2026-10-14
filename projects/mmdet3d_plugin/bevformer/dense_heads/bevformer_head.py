@@ -155,6 +155,43 @@ class BEVFormerHead(DETRHead):
     @auto_fp16(apply_to=('mlvl_feats'))
 
     def _apply_language_attention(self, bev_embed, img_metas):
+        # 1. 从 img_metas 中提取文本指令 (兼容不同的数据格式)
+        instructions = []
+        # 处理 MMDataParallel 可能导致的 dict 格式
+        metas_list = img_metas
+        if isinstance(img_metas, dict):
+            metas_list = list(img_metas.values())
+        if isinstance(metas_list, list) and len(metas_list) > 0 and isinstance(metas_list[0], list):
+            metas_list = metas_list[0]
+            
+        for meta in metas_list:
+            if isinstance(meta, dict):
+                # 尝试获取 instruction，如果没有则给个空字符串
+                instructions.append(meta.get('instruction', meta.get('description', '')))
+            else:
+                instructions.append('')
+        
+        # 如果所有指令都为空，直接返回原特征（降级为基线）
+        if not any(instructions):
+            return bev_embed
+
+        # 2. 语言编码 (Language Encoding)
+        # 假设 lang_encoder 返回 shape 为 [B, Lang_Dim] 或类似特征
+        lang_feats = self.lang_encoder(instructions) 
+        
+        # 3. BEV 语言注意力融合 (BEV-Language Attention)
+        # bev_embed shape: [BEV_H*BEV_W, B, Dim] -> 需要调整为 [B, BEV_H*BEV_W, Dim]
+        b, c = bev_embed.shape[1], bev_embed.shape[2]
+        bev_flat = bev_embed.permute(1, 0, 2) # [B, HW, C]
+        
+        # 调用注意力模块
+        fused_bev = self.bev_attn(bev_flat, lang_feats)
+        
+        # 恢复原始 shape: [HW, B, C]
+        fused_bev = fused_bev.permute(1, 0, 2)
+        
+        return fused_bev
+
         """将语言特征融合到 BEV 特征中，自动适配维度顺序"""
         bs = len(img_metas)
         original_shape = bev_embed.shape

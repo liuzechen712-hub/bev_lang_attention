@@ -120,6 +120,28 @@ class PerceptionTransformer(BaseModule):
         bev_pos = bev_pos.flatten(2).permute(2, 0, 1)
 
         # obtain rotation angle and shift with ego motion
+        # 强制规范化 img_metas 结构并补全 can_bus (解决 MMDataParallel 包装问题)
+        metas = kwargs.get('img_metas', [])
+        
+        # 1. 如果是 dict (例如 {0: [meta]}), 提取 values
+        if isinstance(metas, dict):
+            metas = list(metas.values())
+            
+        # 2. 如果是嵌套 list (例如 [[meta]]), 展平为 [meta]
+        if isinstance(metas, list) and len(metas) > 0 and isinstance(metas[0], list):
+            metas = [item for sublist in metas for item in sublist]
+            
+        # 3. 确保每个元素都是 dict，并补全 can_bus
+        for each in metas:
+            if isinstance(each, dict):
+                cb = each.get('can_bus', None)
+                if not isinstance(cb, (list, np.ndarray)) or len(cb) < 18:
+                    each['can_bus'] = np.zeros(18)
+                    
+        # 4. 更新回 kwargs，确保后续计算 delta_x 等正常工作
+        kwargs['img_metas'] = metas
+
+
         delta_x = np.array([each['can_bus'][0]
                            for each in kwargs['img_metas']])
         delta_y = np.array([each['can_bus'][1]

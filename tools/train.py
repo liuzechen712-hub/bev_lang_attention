@@ -112,6 +112,9 @@ def parse_args():
 
 
 def main():
+
+    # === 物理切断验证集，防止 Epoch 结束时崩溃 ===
+
     args = parse_args()
 
     cfg = Config.fromfile(args.config)

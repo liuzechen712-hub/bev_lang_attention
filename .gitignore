@@ -39,3 +39,9 @@ infos_*.pkl
 
 # Debug Prints Cleanup Marker
 # TODO: Remove DEBUG prints from nuscenes_dataset_v2.py before final release
+work_dirs/
+*.pth
+*.log
+*.log.json
+__pycache__/
+*.pyc

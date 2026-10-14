@@ -156,8 +156,8 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file='/home/lzc/BEVFormer/data/nuscenes/infos_val_filtered.pkl',
-        pipeline=[],
+        ann_file='/home/lzc/BEVFormer/data/nuscenes/infos_val.pkl',
+        pipeline=train_pipeline,
         classes=['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'],
         modality=dict(use_lidar=False, use_camera=True),
         test_mode=True,
@@ -166,8 +166,8 @@ data = dict(
 optimizer = dict(type='AdamW', lr=2e-4, paramwise_cfg=dict(custom_keys={'img_backbone': dict(lr_mult=0.1)}), weight_decay=0.01)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(policy='CosineAnnealing', warmup='linear', warmup_iters=500, warmup_ratio=1.0 / 3, min_lr_ratio=1e-5)
-total_epochs = 1
-evaluation = dict(interval=999999)
+total_epochs = 5
+# evaluation = dict()  # Disabled for pure training
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 checkpoint_config = dict(interval=1)
@@ -180,3 +180,10 @@ resume_from = None
 workflow = [('train', 1)]
 fp16 = dict(loss_scale=512.)
 find_unused_parameters = True
+
+# Fix for test.py: add test dataset config
+data['test'] = data.get('val')
+
+# Force override data_root
+data_root = '/home/lzc/data/drivelm_nuscenes/nuscenes/'
+

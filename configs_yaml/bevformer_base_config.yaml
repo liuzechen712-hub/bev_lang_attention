@@ -1,0 +1,308 @@
+# ============================================================
+# BEVFormer Base Model Configuration
+# Project: BEV-DriveLM
+# Date: 2025
+# Description: Standalone BEVFormer config for nuScenes 3D detection
+# ============================================================
+
+# -------------------- Plugin --------------------
+plugin: true
+plugin_dir: "projects/mmdet3d_plugin/"
+
+# -------------------- Model --------------------
+model:
+  type: BEVFormer
+  use_grid_mask: true
+
+  # Image Backbone
+  img_backbone:
+    type: ResNet
+    depth: 50
+    num_stages: 4
+    out_indices: [1, 2, 3]
+    frozen_stages: 1
+    norm_cfg:
+      type: BN2d
+      requires_grad: false
+    norm_eval: true
+    style: pytorch
+
+  # Image Neck (FPN)
+  img_neck:
+    type: FPN
+    in_channels: [512, 1024, 2048]
+    out_channels: 256
+    start_level: 0
+    add_extra_convs: on_output
+    num_outs: 4
+    relu_before_extra_convs: true
+
+  # PTS BBox Head
+  pts_bbox_head:
+    type: BEVFormerHead
+    num_classes: 10
+    in_channels: 256
+    num_query: 900
+    num_reg_fcs: 2
+    pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+
+    # Transformer
+    transformer:
+      type: PerceptionTransformer
+      rotate_prev_bev: true
+      use_shift: true
+      use_can_bus: true
+      embed_dims: 256
+
+      # Encoder
+      encoder:
+        type: BEVFormerEncoder
+        num_layers: 6
+        pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+        num_points_in_pillar: 4
+        return_intermediate: false
+        transformerlayers:
+          type: BEVFormerLayer
+          attn_cfgs:
+            - type: TemporalSelfAttention
+              embed_dims: 256
+              num_levels: 1
+            - type: SpatialCrossAttention
+              num_cams: 6
+              deformable_attention:
+                type: MSDeformableAttention3D
+                embed_dims: 256
+                num_points: 8
+                num_levels: 4
+              pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+          feedforward_channels: 512
+          embed_dims: 256
+          ffn_dropout: 0.1
+          act_cfg:
+            type: ReLU
+            inplace: true
+          operation_order:
+            - self_attn
+            - norm
+            - cross_attn
+            - norm
+            - ffn
+            - norm
+
+      # Decoder
+      decoder:
+        type: DetectionTransformerDecoder
+        num_layers: 6
+        return_intermediate: true
+        transformerlayers:
+          type: DetrTransformerDecoderLayer
+          attn_cfgs:
+            - type: MultiheadAttention
+              embed_dims: 256
+              num_heads: 8
+              dropout: 0.1
+            - type: CustomMSDeformableAttention
+              embed_dims: 256
+              num_levels: 4
+          feedforward_channels: 512
+          embed_dims: 256
+          ffn_dropout: 0.1
+          act_cfg:
+            type: ReLU
+            inplace: true
+          operation_order:
+            - self_attn
+            - norm
+            - cross_attn
+            - norm
+            - ffn
+            - norm
+
+    # Positional Encoding
+    positional_encoding:
+      type: LearnedPositionalEncoding
+      num_feats: 128
+      row_num_embed: 50
+      col_num_embed: 50
+
+    # Code Weights
+    code_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2]
+
+    # Loss Functions
+    loss_cls:
+      type: FocalLoss
+      use_sigmoid: true
+      gamma: 2.0
+      alpha: 0.25
+      loss_weight: 2.0
+    loss_bbox:
+      type: L1Loss
+      loss_weight: 0.25
+    loss_iou:
+      type: GIoULoss
+      loss_weight: 0.0
+
+    # BBox Coder
+    bbox_coder:
+      type: NMSFreeCoder
+      post_center_range: [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0]
+      pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+      max_num: 300
+      voxel_size: [0.2, 0.2, 8]
+      num_classes: 10
+
+  # Train Config
+  train_cfg:
+    pts:
+      assigner:
+        type: HungarianAssigner3D
+        cls_cost:
+          type: FocalLossCost
+          weight: 2.0
+        reg_cost:
+          type: BBox3DL1Cost
+          weight: 0.25
+        iou_cost:
+          type: IoUCost
+          weight: 0.0
+        pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+
+  # Test Config
+  test_cfg:
+    pts:
+      max_per_img: 100
+
+# -------------------- Dataset --------------------
+dataset_type: CustomNuScenesDatasetV2
+data_root: ./data/nuscenes
+
+class_names:
+  - car
+  - truck
+  - construction_vehicle
+  - bus
+  - trailer
+  - barrier
+  - motorcycle
+  - bicycle
+  - pedestrian
+  - traffic_cone
+
+img_norm_cfg:
+  mean: [103.530, 116.280, 123.675]
+  std: [1.0, 1.0, 1.0]
+  to_rgb: false
+
+# Train Pipeline
+train_pipeline:
+  - type: LoadMultiViewImageFromFiles
+    to_float32: true
+  - type: PhotoMetricDistortionMultiViewImage
+  - type: LoadAnnotations3D
+    with_bbox_3d: true
+    with_label_3d: true
+    with_attr_label: false
+  - type: ObjectRangeFilter
+    point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+  - type: ObjectNameFilter
+    classes: *class_names
+  - type: NormalizeMultiviewImage
+    mean: [103.530, 116.280, 123.675]
+    std: [1.0, 1.0, 1.0]
+    to_rgb: false
+  - type: PadMultiViewImage
+    size_divisor: 32
+  - type: DefaultFormatBundle3D
+    class_names: *class_names
+  - type: Collect3D
+    keys: [gt_bboxes_3d, gt_labels_3d, img]
+
+# Data Loader
+data:
+  samples_per_gpu: 1
+  workers_per_gpu: 4
+  shuffler_sampler:
+    type: DistributedGroupSampler
+  nonshuffler_sampler:
+    type: DistributedSampler
+
+  train:
+    type: CustomNuScenesDatasetV2
+    data_root: ./data/nuscenes
+    ann_file: ./data/nuscenes/infos_train.pkl
+    pipeline: *train_pipeline
+    classes: *class_names
+    modality:
+      use_lidar: false
+      use_camera: true
+    test_mode: false
+    box_type_3d: LiDAR
+
+  val:
+    type: CustomNuScenesDatasetV2
+    data_root: ./data/nuscenes
+    ann_file: ./data/nuscenes/infos_val.pkl
+    pipeline: []
+    classes: *class_names
+    modality:
+      use_lidar: false
+      use_camera: true
+    test_mode: true
+    box_type_3d: LiDAR
+
+# -------------------- Optimizer --------------------
+optimizer:
+  type: AdamW
+  lr: 2.0e-4
+  paramwise_cfg:
+    custom_keys:
+      img_backbone:
+        lr_mult: 0.1
+  weight_decay: 0.01
+
+optimizer_config:
+  grad_clip:
+    max_norm: 35
+    norm_type: 2
+
+# -------------------- LR Schedule --------------------
+lr_config:
+  policy: CosineAnnealing
+  warmup: linear
+  warmup_iters: 500
+  warmup_ratio: 0.3333333333
+  min_lr_ratio: 1.0e-5
+
+# -------------------- Runtime --------------------
+total_epochs: 24
+runner:
+  type: EpochBasedRunner
+  max_epochs: 24
+
+checkpoint_config:
+  interval: 1
+
+log_config:
+  interval: 10
+  hooks:
+    - type: TextLoggerHook
+
+custom_hooks:
+  - type: SetEpochInfoHook
+
+evaluation:
+  interval: 1
+
+dist_params:
+  backend: nccl
+
+log_level: INFO
+load_from: null
+resume_from: null
+workflow:
+  - [train, 1]
+
+fp16:
+  loss_scale: 512.0
+
+find_unused_parameters: true

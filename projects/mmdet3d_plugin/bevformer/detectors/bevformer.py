@@ -250,17 +250,34 @@ class BEVFormer(MVXTwoStageDetector):
         return losses
 
     def forward_test(self, img_metas, img=None, **kwargs):
+        # 修复 DataContainer 解包问题
+        from mmcv.parallel import DataContainer as DC
+        if isinstance(img_metas, DC):
+            img_metas = img_metas.data
+        if isinstance(img, DC):
+            img = img.data
+        
+        # 补全缺失的 can_bus 字段 (DriveLM 数据集可能没有)
+        # img_metas 结构通常是 [[meta1], [meta2], ...]
+        for batch_meta in img_metas:
+            if isinstance(batch_meta, list):
+                for meta in batch_meta:
+                    if 'can_bus' not in meta:
+                        import numpy as np
+                        meta['can_bus'] = np.zeros(18)  # 给一个默认的 18 维全 0 向量
+
         for var, name in [(img_metas, 'img_metas')]:
             if not isinstance(var, list):
                 raise TypeError('{} must be a list, but got {}'.format(
                     name, type(var)))
         img = [img] if img is None else img
 
-        if img_metas[0][0]['scene_token'] != self.prev_frame_info['scene_token']:
+        scene_token = img_metas[0][0].get('scene_token', img_metas[0][0].get('sample_idx', 'unknown'))
+        if scene_token != self.prev_frame_info.get('scene_token', 'unknown'):
             # the first sample of each scene is truncated
             self.prev_frame_info['prev_bev'] = None
         # update idx
-        self.prev_frame_info['scene_token'] = img_metas[0][0]['scene_token']
+        self.prev_frame_info['scene_token'] = scene_token
 
         # do not use temporal information
         if not self.video_test_mode:
@@ -276,8 +293,14 @@ class BEVFormer(MVXTwoStageDetector):
             img_metas[0][0]['can_bus'][-1] = 0
             img_metas[0][0]['can_bus'][:3] = 0
 
+        # 测试阶段不需要 kwargs 中的多余元数据，直接丢弃
+        # 修复 img 维度问题 (6D -> 5D)
+        if isinstance(img, list) and len(img) > 0:
+            if hasattr(img[0], 'dim') and img[0].dim() == 6:
+                img[0] = img[0].squeeze(1)
+        
         new_prev_bev, bbox_results = self.simple_test(
-            img_metas[0], img[0], prev_bev=self.prev_frame_info['prev_bev'], **kwargs)
+            img_metas[0], img[0], prev_bev=self.prev_frame_info['prev_bev'])
         # During inference, we save the BEV features and ego motion of each timestamp.
         self.prev_frame_info['prev_pos'] = tmp_pos
         self.prev_frame_info['prev_angle'] = tmp_angle
