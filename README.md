@@ -104,7 +104,7 @@ We have successfully trained the enhanced BEVFormer model with the Language-Guid
 
 ### 1. Training Loss Convergence
 The model demonstrates stable convergence over 5 epochs, proving the effectiveness of the cross-modal semantic constraints.
-![Loss Curve](assets/loss_curve_enhanced.png)
+![Loss Curve](assets/loss_curve_initial.png)
 
 ### 2. Feature Activation Map
 Visualization of the deep feature activation from the last backbone stage. The model successfully learns discriminative spatial features, focusing on key semantic regions.
