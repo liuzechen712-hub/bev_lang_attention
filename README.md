@@ -97,3 +97,18 @@ Many thanks to these excellent open source projects:
 ### &#8627; Forkers
 [![Forkers repo roster for @nastyox/Repo-Roster](https://reporoster.com/forks/fundamentalvision/BEVFormer)](https://github.com/fundamentalvision/BEVFormer/network/members)
 
+
+## 📊 Experimental Results (Phase 4)
+
+We have successfully trained the enhanced BEVFormer model with the Language-Guided BEV Attention mechanism on the DriveLM subset. 
+
+### 1. Training Loss Convergence
+The model demonstrates stable convergence over 5 epochs, proving the effectiveness of the cross-modal semantic constraints.
+![Loss Curve](assets/loss_curve_enhanced.png)
+
+### 2. Feature Activation Map
+Visualization of the deep feature activation from the last backbone stage. The model successfully learns discriminative spatial features, focusing on key semantic regions.
+![Feature Map](assets/feature_activation.png)
+
+---
+*Project completed successfully. For more details, please refer to the final report.*
