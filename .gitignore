@@ -1,47 +1,20 @@
-# Python & Build
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-dist/
-*.egg-info/
-.installed.cfg
-
-# Virtual Envs
-env/
-venv/
-.conda/
-
-# IDE & OS
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-
-# BEVFormer / MMDet3D Runtime Artifacts (NEVER commit)
-work_dirs/
-checkpoints/
-*.pth
-*.tar
-*.zip
-*.log
-debug_*.py
-tmp/
-
-# Data & Annotations (Large/Sensitive)
-data/
-infos_*.pkl
-*.jsonl
-
-# Debug Prints Cleanup Marker
-# TODO: Remove DEBUG prints from nuscenes_dataset_v2.py before final release
+# 训练产物（严禁上传）
 work_dirs/
 *.pth
 *.log
 *.log.json
+
+# Python 缓存
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 数据集（体积过大，不上传）
+data/
+
+# IDE 与系统文件
+.vscode/
+.idea/
+.DS_Store
